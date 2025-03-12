@@ -3,9 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Loading...</title>
+    <title>Webserver Demo</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            text-align: center;
+            background-color: #f9f9f9;
+        }
+        h2 {
+            color: #007bff;
+        }
         #userInput, #output {
             width: 90vw;
             height: 40vh;
@@ -15,6 +23,7 @@
             border: 1px solid #ccc;
             display: block;
             margin: 10px auto;
+            resize: none;
         }
         button {
             padding: 10px 20px;
@@ -24,37 +33,132 @@
             border: none;
             background-color: #007bff;
             color: white;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .response-container {
+            margin-top: 20px;
+            text-align: left;
+            max-width: 90vw;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        ul {
+            list-style-type: disc;
+            padding-left: 20px;
+        }
+        strong {
+            font-weight: bold;
+        }
+        em {
+            font-style: italic;
         }
     </style>
 </head>
 <body>
     <h2 id="title">Loading...</h2>
-    <textarea id="userInput" placeholder="Enter text here"></textarea>
+    <textarea id="userInput" placeholder="Enter your query here..."></textarea>
     <button onclick="sendRequest()">Send</button>
-    <textarea id="output" readonly placeholder="Response will appear here"></textarea>
+    <div id="output" class="response-container"></div>
 
     <script>
         let userId = 0;
 
         async function fetchUserId() {
-            const response = await fetch("http://127.0.0.1:8000/user_id");
-            const data = await response.json();
-            userId = data.user_id;
-            document.getElementById("title").innerText = `Webserver Demo User (${userId})`;
+            try {
+                const response = await fetch("http://127.0.0.1:8000/user_id");
+                const data = await response.json();
+                userId = data.user_id;
+                document.getElementById("title").innerText = `Webserver Demo User (${userId})`;
+            } catch (error) {
+                console.error("Error fetching user ID:", error);
+                document.getElementById("title").innerText = "Webserver Demo User (Error)";
+            }
         }
 
         async function sendRequest() {
             const input = document.getElementById("userInput").value;
-            const response = await fetch("http://127.0.0.1:8000/process", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: input })
-            });
+            const outputDiv = document.getElementById("output");
+            outputDiv.innerHTML = "<p>Loading...</p>";
 
-            const data = await response.json();
+            try {
+                const response = await fetch("http://127.0.0.1:8000/process", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt: input })
+                });
 
-            // Stringify the response object to display it correctly in the textarea
-            document.getElementById("output").value = JSON.stringify(data.response, null, 2);
+                const data = await response.json();
+
+                // Parse and render the response dynamically
+                if (data.response) {
+                    outputDiv.innerHTML = parseResponse(data.response);
+                } else {
+                    outputDiv.innerHTML = "<p>No response received from the server.</p>";
+                }
+            } catch (error) {
+                console.error("Error sending request:", error);
+                outputDiv.innerHTML = "<p>An error occurred while processing your request. Please try again later.</p>";
+            }
+        }
+
+        function parseResponse(response) {
+            if (typeof response === "string") {
+                // Handle plain text responses
+                return `<p>${formatText(response)}</p>`;
+            } else if (Array.isArray(response)) {
+                // Handle arrays (e.g., lists)
+                return `<ul>${response.map(item => `<li>${formatText(item)}</li>`).join("")}</ul>`;
+            } else if (typeof response === "object" && response !== null) {
+                // Handle objects (e.g., tables)
+                if (Array.isArray(response.rows) && Array.isArray(response.columns)) {
+                    return renderTable(response.rows, response.columns);
+                } else {
+                    // Render key-value pairs as a definition list
+                    return `<dl>${Object.entries(response).map(([key, value]) => `
+                        <dt><strong>${key}:</strong></dt>
+                        <dd>${formatText(value)}</dd>
+                    `).join("")}</dl>`;
+                }
+            } else {
+                return `<p>Unexpected response format: ${JSON.stringify(response)}</p>`;
+            }
+        }
+
+        function renderTable(rows, columns) {
+            let tableHTML = "<table>";
+            // Add header row
+            tableHTML += "<tr>" + columns.map(col => `<th>${col}</th>`).join("") + "</tr>";
+            // Add data rows
+            tableHTML += rows.map(row => "<tr>" + row.map(cell => `<td>${formatText(cell)}</td>`).join("") + "</tr>").join("");
+            tableHTML += "</table>";
+            return tableHTML;
+        }
+
+        function formatText(text) {
+            if (typeof text === "string") {
+                // Replace markdown-like syntax with HTML tags
+                text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>"); // Bold
+                text = text.replace(/__(.*?)__/g, "<em>$1</em>"); // Italic
+            }
+            return text;
         }
 
         document.getElementById("userInput").addEventListener("keypress", function(event) {

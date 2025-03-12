@@ -238,11 +238,11 @@ def identify_missing_params(function_name, provided_args):
     Returns:
         List of missing parameter names
     """
-    tool = registry.get_tool(function_name)
-    if not tool:
+    this_tool = registry.get_tool(function_name)
+    if not this_tool:
         return []
 
-    sig = inspect.signature(tool)
+    sig = inspect.signature(this_tool)
     required_params = [
             param.name for param in sig.parameters.values()
             if param.default == inspect.Parameter.empty

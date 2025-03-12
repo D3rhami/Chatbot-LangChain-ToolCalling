@@ -64,7 +64,6 @@ def generate_response_from_function_results(query: str, function_responses: List
                     f"{product.get('stock_quantity')} items in stock. Price: ${product.get('price'):.2f}."
                 )
             elif "products" in resp.result:
-                products = resp.result.get("products", [])
                 count = resp.result.get("count", 0)
                 result_descriptions.append(
                     f"Found {count} products in inventory. " +

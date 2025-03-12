@@ -1,6 +1,7 @@
 # Standard library imports
 import logging
 import os
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -35,18 +36,17 @@ app.add_middleware(
         allow_methods=["*"],
         allow_headers=["*"],
 )
+# Define the Query model
+from pydantic import BaseModel, SecretStr
 
 # Get API key from environment variables
-API_KEY = os.getenv("API_KEY")
+API_KEY = SecretStr(os.getenv("API_KEY"))
 model_name = "gpt-4o-mini"
-
-# Define the Query model
-from pydantic import BaseModel
 
 
 class Query(BaseModel):
     prompt: str
-    user_id: str = None
+    user_id: Optional[str] = None
     clear_memory: bool = False
 
 
@@ -131,6 +131,7 @@ async def get_user_id():
 
 @app.post("/process")
 async def process_query(query: Query):
+    print("query", query)
     """Process the user's query using LLM with tools"""
     logger.info(f"Received query: {query.prompt}")
 
@@ -183,14 +184,15 @@ async def process_query(query: Query):
             # Try to determine the most relevant function based on the query
             from langchain_openai import ChatOpenAI
 
-            # Create a temporary prompt to analyze the query
             analysis_prompt = f"""
             You are a query analyzer. Based on this user query: "{query.prompt}"
-            Which of these functions would be most appropriate to call?
+            Which of these operations would be most appropriate?
 
-            {generate_system_knowledge()}
+            - Placing a new order
+            - Checking an existing order
+            - Checking product inventory
 
-            Respond with just the function name, or "none" if no function is appropriate.
+            Respond with just one of these operations, or "none" if none are appropriate.
             """
 
             try:
@@ -203,22 +205,65 @@ async def process_query(query: Query):
                 )
 
                 # Get the analyzer's response
+                analysis_prompt = f"""
+                You are a query analyzer. Based on this user query: "{query.prompt}"
+                Which of these operations would be most appropriate?
+
+                - Placing a new order
+                - Checking an existing order
+                - Checking product inventory
+
+                Respond with just one of these operations, or "none" if none are appropriate.
+                """
+
                 analysis_result = analyzer_llm.invoke(analysis_prompt)
-                function_guess = analysis_result.content.strip().lower()
+                analysis_response = analysis_result.content.strip().lower()
+                logger.info(f"Analysis result: {analysis_response}")
+
+                # Map analysis response to function names
+                operation_to_function = {
+                        "placing a new order": "place_order",
+                        "checking an existing order": "check_order",
+                        "checking product inventory": "check_product_inventory"
+                }
+
+                function_guess = operation_to_function.get(analysis_response, "none")
 
                 # Check if a valid function was identified
-                if function_guess in [tool.__name__.lower() for tool in tools()]:
-                    # Identify what parameters would be needed
-                    missing_params = identify_missing_params(function_guess, {})
+                if function_guess != "none":
+                    # Generate user-friendly messages based on the operation
+                    if function_guess == "place_order":
+                        # Parse the query to see what information we already have
+                        has_name = any(word in query.prompt.lower() for word in ["name", "my name"])
+                        has_phone = any(word in query.prompt.lower() for word in ["phone", "number"])
 
-                    response_text = f"I need more information to help you. For the {function_guess} function, please provide: {', '.join(missing_params)}"
+                        if has_name and has_phone:
+                            response_text = "I'd like to place your order. Could you confirm your name and phone number clearly? And please specify any product IDs you'd like to order."
+                        else:
+                            missing = []
+                            if not has_name:
+                                missing.append("your full name")
+                            if not has_phone:
+                                missing.append("your phone number")
+
+                            response_text = f"I'd like to place your order. Please provide {' and '.join(missing)}. If you want specific products, please include their product IDs as well."
+
+                    elif function_guess == "check_order":
+                        response_text = "I can check your order status. Please provide your order number."
+
+                    elif function_guess == "check_product_inventory":
+                        response_text = "I can check product inventory for you. Please provide either a product name or product ID."
+
+                    else:
+                        # Fallback for any new functions
+                        response_text = "I need more specific information to help you with your request. Could you please provide more details?"
                 else:
                     # If no relevant function was identified
-                    response_text = "I can only help with specific functions. Please provide details for one of my available tools."
+                    response_text = "I can only help with placing orders, checking order status, or checking product inventory. Please let me know which of these services you need."
+
             except Exception as e:
                 logger.error(f"Error in query analysis: {str(e)}")
-                response_text = "I can only help with specific functions. Please provide details for one of my available tools."
-
+                response_text = "I can help with placing orders, checking order status, or checking product inventory. How can I assist you today?"
             # Add the response to memory
             memory_manager.add_ai_message(user_id, response_text)
             memory_manager.prune_memory(user_id)
