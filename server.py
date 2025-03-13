@@ -2,9 +2,11 @@
 import logging
 import os
 from typing import Optional
+import json
 
 # Load environment variables
 from dotenv import load_dotenv
+
 # FastAPI imports
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,6 +55,11 @@ class Query(BaseModel):
 memory_manager = MemoryManager()
 users_count = 1
 
+def load_prompts():
+    with open("prompts.json", "r") as file:
+        return json.load(file)
+
+prompts = load_prompts()
 
 @app.get("/user_id")
 async def get_user_id():

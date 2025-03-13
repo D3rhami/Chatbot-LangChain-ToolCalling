@@ -7,6 +7,8 @@ from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, SecretStr
 
+from get_prompts import prompts
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -48,23 +50,7 @@ async def preprocess_query(query: str, model_name: str, api_key: SecretStr) -> U
                 max_retries=2
         )
 
-        # Create the preprocessing prompt
-        preprocessing_prompt = f"""
-        Analyze the following user query and extract:
-        1. The primary intent (one of: check_order, place_order, check_product_inventory, or unknown)
-        2. A brief 1-2 sentence summary of what the user is asking for
-        3. Any key information entities like:
-           - order_id: Any order ID numbers mentioned
-           - customer_name: Customer's name if provided
-           - phone_number: Phone number if provided
-           - product_id: Any product IDs mentioned
-           - product_name: Any product names mentioned
-        4. A confidence score (0-1) for how certain you are about the primary intent
-
-        Format the response as valid JSON with these keys: primary_intent, summary, extracted_entities, confidence
-
-        USER QUERY: {query}
-        """
+        preprocessing_prompt = prompts["preprocessing_prompt"]["value"].format(query=query)
 
         # Get the analysis from the LLM
         human_message = HumanMessage(content=preprocessing_prompt)

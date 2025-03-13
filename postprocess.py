@@ -1,6 +1,7 @@
 # Standard library imports
 import logging
 from typing import Optional
+from get_prompts import prompts
 
 # LangChain imports
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -44,55 +45,22 @@ async def postprocess_result(
         )
 
         # Create a system message with guidelines for generating HTML responses
-        system_prompt = """
-        You are a helpful assistant that represents an e-commerce system.
-
-        When responding to the user:
-        1. DO NOT mention internal function names directly
-        2. DO NOT expose internal parameter names or types
-        3. DO NOT mention how the system works internally
-        4. Present results in a user-friendly, conversational way
-        5. If there was an error, explain it simply without technical details
-        6. Be concise but complete
-        7. Format the response as valid HTML with appropriate tags for:
-           - Paragraphs (<p>)
-           - Bold text (<strong>)
-           - Tables (<table>, <tr>, <td>)
-           - Lists (<ul>, <li>)
-           - Headings (<h1>, <h2>, etc.)
-        8. Use inline styles or classes for basic formatting (e.g., colors, alignment)
-        """
+        system_prompt = prompts["system_prompt"]["value"]
 
         # Prepare the prompt based on the input
         if follow_up_question:
-            prompt = f"""
-            The user asked: "{query}"
-
-            I need to ask a follow-up question:
-            {follow_up_question}
-
-            Please create a helpful, conversational response in HTML format that presents this follow-up question in a user-friendly way.
-            """
+            prompt = prompts["follow_up_prompt"]["value"].format(
+                    query=query,
+                    follow_up_question=follow_up_question
+            )
         elif function_response:
-            result_json = str(function_response.result)
-            prompt = f"""
-            The user asked: "{query}"
-
-            I executed the "{function_response.function_name}" operation with these parameters:
-            {function_response.arguments}
-
-            Here are the results:
-            {result_json}
-
-            Please create a helpful, conversational response in HTML format that presents this information in a user-friendly way.
-            Do not expose internal function names or technical details.
-            """
+            prompt = prompts["function_response_prompt"]["value"].format(
+                    query=query,
+                    function_response=function_response,
+                    result_json=str(function_response.result)
+            )
         else:
-            prompt = f"""
-            The user asked: "{query}"
-
-            I couldn't determine the intent or execute a function. Please create a helpful, conversational response in HTML format that asks the user for clarification.
-            """
+            prompt = prompts["unknown_intent_prompt"]["value"].format(query=query)
 
         # Get the humanized response
         messages = [

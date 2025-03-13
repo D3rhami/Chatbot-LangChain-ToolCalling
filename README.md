@@ -71,32 +71,32 @@ To get started with this project, follow these steps:
 
 ## File Descriptions 📂
 
-<details> <summary><strong>📄 server.py</strong></summary> 
+<details> <summary>📄 server.py</summary> 
 This file sets up the FastAPI server, handles incoming requests, and manages the chatbot's interaction flow. </details>
 
 <details> 
-<summary><strong>📄 memory_manager.py</strong></summary> 
+<summary>📄 memory_manager.py</summary> 
 This file manages conversation memory for users, ensuring that the chatbot can maintain context across multiple interactions. </details>
 
 <details> 
-<summary><strong>📄 function_manager.py</strong></summary> 
+<summary>📄 function_manager.py</summary> 
 This file manages the registration, execution, and response handling of functions that interact with the database and other systems.
 </details>
 
 <details>
-<summary><strong>📄 preprocess.py</strong></summary> 
+<summary>📄 preprocess.py</summary> 
 This file preprocesses user queries to understand intent and extract entities, preparing the input for function execution.
 </details>
 
 <details> 
-<summary><strong>📄 process.py</strong></summary>
+<summary>📄 process.py</summary>
 This file processes the user intent, executes the appropriate function, and generates follow-up questions if needed. </details>
 
-<details> <summary><strong>📄 postprocess.py</strong></summary> 
+<details> <summary>📄 postprocess.py</summary> 
 This file handles the postprocessing of function results, generating human-friendly responses in HTML format. </details>
 
 <details> 
-<summary><strong>📄 database.py</strong></summary> 
+<summary>📄 database.py</summary> 
 This file handles all database interactions, including querying the database schema, checking order status, registering new orders, and checking product inventory.
 </details>
 
@@ -117,7 +117,7 @@ project. Together, we can make this chatbot even better! 🚀
 
 ---
 
-### License 📄
+### License 📰
 
 This project is licensed under the [MIT License](LICENSE). See the `LICENSE` file for more details.
 

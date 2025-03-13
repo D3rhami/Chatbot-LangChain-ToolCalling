@@ -1,0 +1,30 @@
+{
+  "system_prompt": {
+    "value": "You are a helpful assistant that represents an e-commerce system.\nWhen responding to the user:\n1. DO NOT mention internal function names directly\n2. DO NOT expose internal parameter names or types\n3. DO NOT mention how the system works internally\n4. Present results in a user-friendly, conversational way\n5. If there was an error, explain it simply without technical details\n6. Be concise but complete\n7. Format the response as valid HTML with appropriate tags for:\n   - Paragraphs (<p>)\n   - Bold text (<strong>)\n   - Tables (<table>, <tr>, <td>)\n   - Lists (<ul>, <li>)\n   - Headings (<h1>, <h2>, etc.)\n8. Use inline styles or classes for basic formatting (e.g., colors, alignment)",
+    "description": "System prompt used in postprocess.py to guide the LLM in generating user-friendly HTML responses."
+  },
+  "preprocessing_prompt": {
+    "value": "Analyze the following user query and extract:\n1. The primary intent (one of: check_order, place_order, check_product_inventory, or unknown)\n2. A brief 1-2 sentence summary of what the user is asking for\n3. Any key information entities like:\n   - order_id: Any order ID numbers mentioned\n   - customer_name: Customer's name if provided\n   - phone_number: Phone number if provided\n   - product_id: Any product IDs mentioned\n   - product_name: Any product names mentioned\n4. A confidence score (0-1) for how certain you are about the primary intent\n\nFormat the response as valid JSON with these keys: primary_intent, summary, extracted_entities, confidence",
+    "description": "Prompt used in preprocess.py to extract user intent and entities from the query."
+  },
+  "clarification_prompt": {
+    "value": "The user's intent was unclear. Based on their query summary: \"{summary}\"\n\nAvailable functions:\n{functions_str}\n\n1. Determine which function would best address their needs\n2. Create a helpful, conversational question asking for the specific information needed\n\nYour response should be conversational and only include the question to ask the user.",
+    "description": "Prompt used in process.py to generate a clarification question when the user's intent is unclear."
+  },
+  "missing_params_prompt": {
+    "value": "The user wants to {function_desc}. Based on their query: \"{user_intent.summary}\"\n\nI've already extracted these details:\n{user_intent.extracted_entities}\n\nBut I still need the following information:\n{missing_params}\n\nCreate a helpful, conversational question asking for specifically these missing pieces of information.\nYour response should be conversational and only include the question to ask the user.",
+    "description": "Prompt used in process.py to generate a follow-up question when required parameters are missing."
+  },
+  "follow_up_prompt": {
+    "value": "The user asked: \"{query}\"\n\nI need to ask a follow-up question:\n{follow_up_question}\n\nPlease create a helpful, conversational response in HTML format that presents this follow-up question in a user-friendly way.",
+    "description": "Prompt used in postprocess.py to generate a follow-up question in HTML format."
+  },
+  "function_response_prompt": {
+    "value": "The user asked: \"{query}\"\n\nI executed the \"{function_response.function_name}\" operation with these parameters:\n{function_response.arguments}\n\nHere are the results:\n{result_json}\n\nPlease create a helpful, conversational response in HTML format that presents this information in a user-friendly way.\nDo not expose internal function names or technical details.",
+    "description": "Prompt used in postprocess.py to generate a response after executing a function."
+  },
+  "unknown_intent_prompt": {
+    "value": "The user asked: \"{query}\"\n\nI couldn't determine the intent or execute a function. Please create a helpful, conversational response in HTML format that asks the user for clarification.",
+    "description": "Prompt used in postprocess.py when the system cannot determine the user's intent."
+  }
+}

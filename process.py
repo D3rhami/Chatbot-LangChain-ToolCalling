@@ -2,6 +2,7 @@
 import inspect
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+from get_prompts import prompts
 
 # LangChain imports
 from langchain_core.messages import HumanMessage
@@ -45,8 +46,8 @@ registry.register(
 # Update schema on startup
 try:
     registry.update_schema()
-except Exception as e:
-    logger.error(f"Failed to initialize database schema: {str(e)}")
+except Exception as sch_e:
+    logger.error(f"Failed to initialize database schema: {str(sch_e)}")
 
 
 def validate_and_convert_entities(extracted_entities: Dict[str, Any], required_params: Dict[str, type]) -> Dict[
@@ -124,9 +125,9 @@ async def process_intent(
         # Execute the function with validated entities
         return await _execute_function(intent, validated_entities), None
 
-    except ValueError as e:
-        logger.error(f"Validation error: {str(e)}")
-        return None, f"I need more information. {str(e)}"
+    except ValueError as pr_e:
+        logger.error(f"Validation error: {str(pr_e)}")
+        return None, f"I need more information. {str(pr_e)}"
 
 
 async def _execute_function(function_name: str, params: Dict[str, Any]) -> FunctionResponse:
@@ -147,7 +148,7 @@ async def _execute_function(function_name: str, params: Dict[str, Any]) -> Funct
         sig = inspect.signature(func)
         valid_params = {}
 
-        for param_name, param in sig.parameters.items():
+        for param_name, _ in sig.parameters.items():
             if param_name in params:
                 valid_params[param_name] = params[param_name]
 
@@ -160,14 +161,14 @@ async def _execute_function(function_name: str, params: Dict[str, Any]) -> Funct
                 result=result,
                 success="error" not in result
         )
-    except Exception as e:
-        logger.error(f"Error executing function {function_name}: {str(e)}")
+    except Exception as ex_e1:
+        logger.error(f"Error executing function {function_name}: {str(ex_e1)}")
         return FunctionResponse(
                 function_name=function_name,
                 arguments=params,
-                result={"error": str(e)},
+                result={"error": str(ex_e1)},
                 success=False,
-                error_message=str(e)
+                error_message=str(ex_e1)
         )
 
 
@@ -194,26 +195,18 @@ async def _generate_clarification_question(
 
         functions_str = "\n".join(available_functions)
 
-        # Create the prompt
-        prompt = f"""
-        The user's intent was unclear. Based on their query summary: "{user_intent.summary}"
-
-        Available functions:
-        {functions_str}
-
-        1. Determine which function would best address their needs
-        2. Create a helpful, conversational question asking for the specific information needed
-
-        Your response should be conversational and only include the question to ask the user.
-        """
+        clarification_prompt = prompts["clarification_prompt"]["value"].format(
+                summary=user_intent.summary,
+                functions_str=functions_str
+        )
 
         # Get the response
-        human_message = HumanMessage(content=prompt)
+        human_message = HumanMessage(content=clarification_prompt)
         response = await llm.ainvoke([human_message])
 
         return None, response.content.strip()
-    except Exception as e:
-        logger.error(f"Error generating clarification question: {str(e)}")
+    except Exception as gc_e:
+        logger.error(f"Error generating clarification question: {str(gc_e)}")
         return None, "I need more information to help you. Could you please clarify what you're looking for?"
 
 
@@ -229,30 +222,20 @@ async def _generate_missing_params_question(
         llm = ChatOpenAI(
                 model=model_name,
                 base_url="https://api.avalai.ir/v1",
-                api_key=api_key,
-                max_retries=2
+                api_key=api_key
         )
 
         # Get function details
         func_details = registry.get_function(user_intent.primary_intent)
         function_desc = func_details["description"] if func_details else "this operation"
 
-        # Create the prompt
-        prompt = f"""
-        The user wants to {function_desc}. Based on their query: "{user_intent.summary}"
-
-        I've already extracted these details:
-        {user_intent.extracted_entities}
-
-        But I still need the following information:
-        {", ".join(missing_params)}
-
-        Create a helpful, conversational question asking for specifically these missing pieces of information.
-        Your response should be conversational and only include the question to ask the user.
-        """
-
+        missing_params_prompt = prompts["missing_params_prompt"]["value"].format(
+                function_desc=function_desc,
+                user_intent=user_intent,
+                missing_params=", ".join(missing_params)
+        )
         # Get the response
-        human_message = HumanMessage(content=prompt)
+        human_message = HumanMessage(content=missing_params_prompt)
         response = await llm.ainvoke([human_message])
 
         return None, response.content.strip()
