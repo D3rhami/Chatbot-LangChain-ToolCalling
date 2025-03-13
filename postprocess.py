@@ -1,158 +1,110 @@
 # Standard library imports
 import logging
-from typing import List
+from typing import Optional
 
 # LangChain imports
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-# Import from process module
-from process import FunctionResponse, tools, generate_system_knowledge
+# Import from process
+from process import FunctionResponse
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 
-def generate_response_from_function_results(query: str, function_responses: List[FunctionResponse]) -> str:
+async def postprocess_result(
+        query: str,
+        function_response: Optional[FunctionResponse],
+        follow_up_question: Optional[str],
+        model_name: str,
+        api_key: SecretStr
+) -> str:
     """
-    Generate a human-readable response based on function results when LLM is unavailable
+    Post-process results by generating a human-friendly response with HTML formatting.
 
     Args:
         query: The original user query
-        function_responses: List of function responses
+        function_response: The function response (if any)
+        follow_up_question: A follow-up question (if any)
+        model_name: The name of the LLM model to use
+        api_key: API key for the LLM
 
     Returns:
-        A human-readable response based on the function results
+        String containing the human-friendly response in a html format
     """
-    if not function_responses:
-        return "I need specific information to help you with one of my available functions. Please provide more details."
-
-    # Generic response based on function results
-    result_descriptions = []
-    for resp in function_responses:
-        if resp.function_name == "check_order":
-            if "error" in resp.result:
-                result_descriptions.append(f"I couldn't find the order you requested: {resp.result.get('error')}")
-            else:
-                status = resp.result.get("status", "Unknown")
-                customer = resp.result.get("customer", {}).get("name", "Unknown customer")
-                items_count = len(resp.result.get("items", []))
-                total_price = resp.result.get("total_price", 0)
-                result_descriptions.append(
-                    f"Order #{resp.result.get('order_id')} for {customer} is currently {status}. " +
-                    f"It contains {items_count} items with a total price of ${total_price:.2f}."
-                )
-        elif resp.function_name == "place_order":
-            if "error" in resp.result:
-                result_descriptions.append(f"I couldn't place your order: {resp.result.get('error')}")
-            else:
-                order_id = resp.result.get("order_id")
-                customer = resp.result.get("customer", {}).get("name")
-                products_count = len(resp.result.get("products", []))
-                total_price = resp.result.get("total_price", 0)
-                result_descriptions.append(
-                    f"Successfully placed order #{order_id} for {customer}. " +
-                    f"Added {products_count} products with a total price of ${total_price:.2f}."
-                )
-        elif resp.function_name == "check_product_inventory":
-            if "error" in resp.result:
-                result_descriptions.append(f"I couldn't check the inventory: {resp.result.get('error')}")
-            elif "product" in resp.result:
-                product = resp.result.get("product", {})
-                result_descriptions.append(
-                    f"Product '{product.get('name')}' (ID: {product.get('id')}) has " +
-                    f"{product.get('stock_quantity')} items in stock. Price: ${product.get('price'):.2f}."
-                )
-            elif "products" in resp.result:
-                count = resp.result.get("count", 0)
-                result_descriptions.append(
-                    f"Found {count} products in inventory. " +
-                    f"Total items in stock: {resp.result.get('total_items_in_stock', 0)}."
-                )
-        else:
-            # For new functions that might be added in the future
-            # Don't expose internal function names or details
-            result_descriptions.append(f"Operation completed successfully: {resp.result}")
-
-    return f"Here are the results: {'; '.join(result_descriptions)}"
-
-
-async def postprocess_results(messages: List, query: str, function_responses: List[FunctionResponse],
-                              api_key: SecretStr,
-                              model_name: str) -> str:
-    """
-    Post-process results by getting a final response from the LLM
-
-    Args:
-        messages: The conversation history
-        query: The original user query
-        function_responses: List of function responses
-        api_key: The API key for the LLM
-        model_name: The name of the model to use
-
-    Returns:
-        The final response to the user
-    """
-    # Initialize the LLM with retry settings
-    llm = ChatOpenAI(
-            model=model_name,
-            base_url="https://api.avalai.ir/v1",  # Removed extra spaces
-            api_key=api_key,
-            max_retries=3
-    )
-
-    # Get the current tools from the registry
-    current_tools = tools()
-    llm_with_tools = llm.bind_tools(current_tools)
-
-    # Prepare a security prompt to ensure we don't leak backend details
-    security_system_prompt = """
-    When responding to the user:
-    1. DO NOT mention internal function names directly
-    2. DO NOT expose internal parameter names or types
-    3. DO NOT mention how the system works internally
-    4. Present results in a user-friendly way without technical jargon
-    5. Focus only on the results that are relevant to the user
-
-    For example, instead of saying "I called the check_order function with parameter order_id=5", 
-    say "I've checked the status of your order #5 for you".
-    """
-
-    # Prepare final response - handle potential rate limits
     try:
-        # Get the final response from the LLM
-        logger.info("Requesting final response from LLM")
+        # Initialize the LLM
+        llm = ChatOpenAI(
+                model=model_name,
+                base_url="https://api.avalai.ir/v1",
+                api_key=api_key,
+                max_retries=2
+        )
 
-        # Create a temporary set of messages with the security prompt
-        from langchain_core.messages import SystemMessage
+        # Create a system message with guidelines for generating HTML responses
+        system_prompt = """
+        You are a helpful assistant that represents an e-commerce system.
 
-        # Check if we already have a system message
-        has_system = any(isinstance(msg, SystemMessage) for msg in messages)
+        When responding to the user:
+        1. DO NOT mention internal function names directly
+        2. DO NOT expose internal parameter names or types
+        3. DO NOT mention how the system works internally
+        4. Present results in a user-friendly, conversational way
+        5. If there was an error, explain it simply without technical details
+        6. Be concise but complete
+        7. Format the response as valid HTML with appropriate tags for:
+           - Paragraphs (<p>)
+           - Bold text (<strong>)
+           - Tables (<table>, <tr>, <td>)
+           - Lists (<ul>, <li>)
+           - Headings (<h1>, <h2>, etc.)
+        8. Use inline styles or classes for basic formatting (e.g., colors, alignment)
+        """
 
-        temp_messages = messages.copy()
-        if has_system:
-            # Find and update the existing system message
-            for i, msg in enumerate(temp_messages):
-                if isinstance(msg, SystemMessage):
-                    original_content = msg.content
-                    temp_messages[i] = SystemMessage(content=f"{original_content}\n\n{security_system_prompt}")
-                    break
+        # Prepare the prompt based on the input
+        if follow_up_question:
+            prompt = f"""
+            The user asked: "{query}"
+
+            I need to ask a follow-up question:
+            {follow_up_question}
+
+            Please create a helpful, conversational response in HTML format that presents this follow-up question in a user-friendly way.
+            """
+        elif function_response:
+            result_json = str(function_response.result)
+            prompt = f"""
+            The user asked: "{query}"
+
+            I executed the "{function_response.function_name}" operation with these parameters:
+            {function_response.arguments}
+
+            Here are the results:
+            {result_json}
+
+            Please create a helpful, conversational response in HTML format that presents this information in a user-friendly way.
+            Do not expose internal function names or technical details.
+            """
         else:
-            # Add a new system message with both contents
-            system_message = SystemMessage(content=f"{generate_system_knowledge()}\n\n{security_system_prompt}")
-            temp_messages.insert(0, system_message)
+            prompt = f"""
+            The user asked: "{query}"
 
-        final_response = llm_with_tools.invoke(temp_messages)
-        logger.info("Final response received successfully")
+            I couldn't determine the intent or execute a function. Please create a helpful, conversational response in HTML format that asks the user for clarification.
+            """
 
-        # If no function was called, ensure we don't provide a generic response
-        if not function_responses:
-            return "I need specific information to help you with one of my available functions. Please provide more details."
+        # Get the humanized response
+        messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=prompt)
+        ]
 
-        return final_response.content
+        response = await llm.ainvoke(messages)
+        return response.content.strip()
+
     except Exception as e:
-        logger.error(f"Error getting final response: {str(e)}")
-        # If we hit rate limits again, construct a reasonable response from what we have
-        fallback_response = generate_response_from_function_results(query, function_responses)
-        logger.info(f"Generated fallback response: {fallback_response}")
-        return fallback_response
+        logger.error(f"Error in postprocess_result: {str(e)}")
+
+        # Fallback response in case of errors
+        return "<p>Sorry, I encountered an issue processing your request. Please try again.</p>"

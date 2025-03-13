@@ -1,88 +1,108 @@
 # Standard library imports
 import logging
-import random
-import time
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List
 
 # LangChain imports
-from langchain_core.messages import AIMessage
+from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
-
-# Import from process module
-from process import execute_function_call, FunctionResponse, tools
+from pydantic import BaseModel, Field, SecretStr
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 
-async def preprocess_query(messages: List, api_key: SecretStr, model_name: str) -> Tuple[
-    List, Optional[AIMessage], List[FunctionResponse]]:
+class UserIntent(BaseModel):
+    """Model for capturing user intent and extracted entities"""
+    primary_intent: str = Field(description="The primary function the user is trying to access")
+    summary: str = Field(description="Brief summary of user request in 1-2 sentences")
+    extracted_entities: Dict[str, Any] = Field(description="Key-value pairs of information extracted from user input")
+    confidence: float = Field(description="Confidence score between 0-1 for the primary intent")
+
+    def has_required_entities(self, required_entities: List[str]) -> Dict[str, bool]:
+        """Checks if all required entities are present"""
+        return {entity: entity in self.extracted_entities for entity in required_entities}
+
+    def missing_entities(self, required_entities: List[str]) -> List[str]:
+        """Returns a list of missing required entities"""
+        return [entity for entity in required_entities if entity not in self.extracted_entities]
+
+
+async def preprocess_query(query: str, model_name: str, api_key: SecretStr) -> UserIntent:
     """
-    Preprocess the query by sending it to the LLM and getting tool calls
+    Preprocess the user query to understand intent and extract entities
 
     Args:
-        messages: The conversation history
-        api_key: The API key for the LLM
-        model_name: The name of the model to use
+        query: The user's query
+        model_name: The name of the LLM model to use
+        api_key: API key for the LLM
 
     Returns:
-        Tuple containing messages, LLM output, and function responses
+        UserIntent object containing the extracted information
     """
-    llm = ChatOpenAI(
-            model=model_name,
-            base_url="https://api.avalai.ir/v1",  # Removed extra spaces
-            api_key=api_key,
-            max_retries=3
-    )
+    try:
+        # Initialize the LLM
+        llm = ChatOpenAI(
+                model=model_name,
+                base_url="https://api.avalai.ir/v1",
+                api_key=api_key,
+                max_retries=2
+        )
 
-    # Get the current tools from the registry
-    current_tools = tools()
-    llm_with_tools = llm.bind_tools(current_tools)
+        # Create the preprocessing prompt
+        preprocessing_prompt = f"""
+        Analyze the following user query and extract:
+        1. The primary intent (one of: check_order, place_order, check_product_inventory, or unknown)
+        2. A brief 1-2 sentence summary of what the user is asking for
+        3. Any key information entities like:
+           - order_id: Any order ID numbers mentioned
+           - customer_name: Customer's name if provided
+           - phone_number: Phone number if provided
+           - product_id: Any product IDs mentioned
+           - product_name: Any product names mentioned
+        4. A confidence score (0-1) for how certain you are about the primary intent
 
-    llm_output = _invoke_llm_with_retries(llm_with_tools, messages, max_retries=3)
+        Format the response as valid JSON with these keys: primary_intent, summary, extracted_entities, confidence
 
-    if llm_output is None:
-        return messages, None, []
+        USER QUERY: {query}
+        """
 
-    function_responses = _process_tool_calls(llm_output, messages)
+        # Get the analysis from the LLM
+        human_message = HumanMessage(content=preprocessing_prompt)
+        response = await llm.ainvoke([human_message])
 
-    return messages, llm_output, function_responses
+        # Parse the response
+        import json
+        import re
 
+        # Extract the JSON part from the response
+        json_match = re.search(r'\{.*}', response.content, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(0)
+            intent_data = json.loads(json_str)
 
-def _invoke_llm_with_retries(llm_with_tools, messages, max_retries):
-    for attempt in range(max_retries):
-        try:
-            logger.info(f"Attempt {attempt + 1}: Sending query with {len(messages)} messages to LLM")
-            return llm_with_tools.invoke(messages)
-        except Exception as e:
-            logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
-            if "rate_limit" in str(e).lower() and attempt < max_retries - 1:
-                wait_time = (2 ** attempt) + random.random()
-                logger.info(f"Rate limit hit, retrying in {wait_time:.2f} seconds...")
-                time.sleep(wait_time)
-            else:
-                logger.error(f"All retries failed or other error: {str(e)}")
-                return None
-    return None
+            # Create and return the UserIntent object
+            return UserIntent(
+                    primary_intent=intent_data.get("primary_intent", "unknown"),
+                    summary=intent_data.get("summary", ""),
+                    extracted_entities=intent_data.get("extracted_entities", {}),
+                    confidence=float(intent_data.get("confidence", 0.0))
+            )
+        else:
+            logger.warning("Failed to extract JSON from LLM response")
+            # Return a default UserIntent with unknown intent
+            return UserIntent(
+                    primary_intent="unknown",
+                    summary="Could not understand the user query",
+                    extracted_entities={},
+                    confidence=0.0
+            )
 
-
-def _process_tool_calls(llm_output, messages):
-    function_responses = []
-    if hasattr(llm_output, 'tool_calls') and llm_output.tool_calls:
-        from langchain_core.messages import ToolMessage
-        logger.info(f"LLM requested {len(llm_output.tool_calls)} tool call(s)")
-
-        # Store reference to the AIMessage with tool_calls
-        tool_call_msg = llm_output
-        messages.append(tool_call_msg)  # Append this message first
-
-        for tool_call in llm_output.tool_calls:
-            function_response = execute_function_call(tool_call)
-            if function_response:
-                function_responses.append(function_response)
-                messages.append(ToolMessage(
-                        content=str(function_response.result),
-                        tool_call_id=tool_call["id"]
-                ))
-    return function_responses
+    except Exception as e:
+        logger.error(f"Error in preprocess_query: {str(e)}")
+        # Return a default UserIntent with error info
+        return UserIntent(
+                primary_intent="unknown",
+                summary=f"Error processing query: {str(e)}",
+                extracted_entities={},
+                confidence=0.0
+        )
