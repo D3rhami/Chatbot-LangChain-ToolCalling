@@ -158,6 +158,8 @@ fabric.properties
 
 .venv/*
 .idea/*
+.venv
+.idea
 .env
 
 /g.py

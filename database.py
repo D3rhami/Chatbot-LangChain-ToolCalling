@@ -1,12 +1,12 @@
 # Standard library imports
 import logging
 import os
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-# SQLAlchemy imports
-from sqlalchemy import create_engine, text, inspect
-from sqlalchemy.exc import SQLAlchemyError
 from dotenv import load_dotenv
+# SQLAlchemy imports
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -26,7 +26,8 @@ except Exception as e:
     raise
 
 
-def get_database_schema() -> Dict[str, List[Dict[str, Any]]]:
+def get_database_schema() -> dict[
+    str, dict[str, list[dict[str, str | bool]] | list[dict[str, str | list[str]]] | list[str]]]:
     """
     Get the schema of the database to dynamically adapt to any changes.
 
@@ -66,8 +67,8 @@ def get_database_schema() -> Dict[str, List[Dict[str, Any]]]:
 
         logger.info(f"Retrieved database schema with {len(schema)} tables")
         return schema
-    except Exception as e:
-        logger.error(f"Error getting database schema: {str(e)}")
+    except Exception as error1:
+        logger.error(f"Error getting database schema: {str(error1)}")
         raise
 
 
@@ -134,12 +135,12 @@ def check_order_status(order_id: int) -> Dict[str, Any]:
 
             logger.info(f"Retrieved order status for order {order_id}: {order_details['status']}")
             return order_details
-    except SQLAlchemyError as e:
-        logger.error(f"Database error checking order status: {str(e)}")
-        return {"error": f"Database error: {str(e)}"}
-    except Exception as e:
-        logger.error(f"Error checking order status: {str(e)}")
-        return {"error": f"Error: {str(e)}"}
+    except SQLAlchemyError as ch_e1:
+        logger.error(f"Database error checking order status: {str(ch_e1)}")
+        return {"error": f"Database error: {str(ch_e1)}"}
+    except Exception as ch_e2:
+        logger.error(f"Error checking order status: {str(ch_e2)}")
+        return {"error": f"Error: {str(ch_e2)}"}
 
 
 def register_order(customer_name: str, phone_number: str, products: List[int] = None) -> Dict[str, Any]:
@@ -262,17 +263,17 @@ def register_order(customer_name: str, phone_number: str, products: List[int] = 
                         "products": added_products,
                         "total_price": sum(product["price"] for product in added_products)
                 }
-            except Exception as e:
+            except Exception as rg_e:
                 # Rollback transaction in case of error
                 trans.rollback()
-                logger.error(f"Error in transaction, rolling back: {str(e)}")
+                logger.error(f"Error in transaction, rolling back: {str(rg_e)}")
                 raise
-    except SQLAlchemyError as e:
-        logger.error(f"Database error registering order: {str(e)}")
-        return {"error": f"Database error: {str(e)}"}
-    except Exception as e:
-        logger.error(f"Error registering order: {str(e)}")
-        return {"error": f"Error: {str(e)}"}
+    except SQLAlchemyError as rg_e1:
+        logger.error(f"Database error registering order: {str(rg_e1)}")
+        return {"error": f"Database error: {str(rg_e1)}"}
+    except Exception as rg_e2:
+        logger.error(f"Error registering order: {str(rg_e2)}")
+        return {"error": f"Error: {str(rg_e2)}"}
 
 
 def check_inventory(product_id: Optional[int] = None, product_name: Optional[str] = None) -> Dict[str, Any]:
@@ -363,9 +364,9 @@ def check_inventory(product_id: Optional[int] = None, product_name: Optional[str
                         "count": len(products),
                         "total_items_in_stock": sum(product["stock_quantity"] for product in products)
                 }
-    except SQLAlchemyError as e:
-        logger.error(f"Database error checking inventory: {str(e)}")
-        return {"error": f"Database error: {str(e)}"}
-    except Exception as e:
-        logger.error(f"Error checking inventory: {str(e)}")
-        return {"error": f"Error: {str(e)}"}
+    except SQLAlchemyError as er_sql:
+        logger.error(f"Database error checking inventory: {str(er_sql)}")
+        return {"error": f"Database error: {str(er_sql)}"}
+    except Exception as error2:
+        logger.error(f"Error checking inventory: {str(error2)}")
+        return {"error": f"Error: {str(error2)}"}
