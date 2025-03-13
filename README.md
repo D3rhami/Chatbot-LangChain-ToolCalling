@@ -2,7 +2,7 @@
 
 ## Performance Review
 
-[![Python Version](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/e96025ba3e9741a59877775df43355fa)](https://app.codacy.com/gh/D3rhami/Chatbot-LangChain-ToolCalling/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![Python Version](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
 [![Latest Version](https://img.shields.io/pypi/v/langchain?label=langchain)](https://pypi.org/project/langchain/)
 [![Supported Platforms](https://img.shields.io/badge/platform-linux%20|%20macOS%20|%20windows-green)](https://github.com/your-repo/simple-langchain-chatbot)
 
@@ -99,6 +99,7 @@ This file handles the postprocessing of function results, generating human-frien
 <summary><strong>📄 database.py</strong></summary> 
 This file handles all database interactions, including querying the database schema, checking order status, registering new orders, and checking product inventory.
 </details>
+
 --- 
 
 ## Documentation and Code Quality 📚✨
