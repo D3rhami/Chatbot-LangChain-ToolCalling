@@ -1,24 +1,21 @@
 # Standard library imports
-import logging
-from typing import Dict, List, Any, Optional, Tuple
 import inspect
+import logging
+from typing import Any, Dict, List, Optional, Tuple
 
 # LangChain imports
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
 # Import our database module
-from database import check_order_status, register_order, check_inventory, get_database_schema
-
+from database import check_inventory, check_order_status, register_order
+from function_manager import FunctionRegistry, FunctionResponse
 # Import from preprocess
 from preprocess import UserIntent
 
-from function_manager import FunctionResponse, FunctionRegistry
-
 # Set up logging
 logger = logging.getLogger(__name__)
-
 
 # Initialize the function registry
 registry = FunctionRegistry()
@@ -52,7 +49,8 @@ except Exception as e:
     logger.error(f"Failed to initialize database schema: {str(e)}")
 
 
-def validate_and_convert_entities(extracted_entities: Dict[str, Any], required_params: Dict[str, type]) -> Dict[str, Any]:
+def validate_and_convert_entities(extracted_entities: Dict[str, Any], required_params: Dict[str, type]) -> Dict[
+    str, Any]:
     """
     Validate and convert extracted entities to match the required parameter types.
 
@@ -119,8 +117,8 @@ async def process_intent(
     try:
         # Validate and convert extracted entities
         validated_entities = validate_and_convert_entities(
-            user_intent.extracted_entities,
-            {param: int if param.endswith("_id") else str for param in required_params}
+                user_intent.extracted_entities,
+                {param: int if param.endswith("_id") else str for param in required_params}
         )
 
         # Execute the function with validated entities
