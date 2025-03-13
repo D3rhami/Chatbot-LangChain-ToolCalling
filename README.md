@@ -1,4 +1,4 @@
-# Simple LangChain Chatbot (with Tools Calling and Memory)
+# LangChain Chatbot (Tools Calling and Memory)
 
 ## Performance Review
 

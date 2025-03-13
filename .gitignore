@@ -163,3 +163,5 @@ fabric.properties
 .env
 
 /g.py
+./SimpleLangChainChatbot0
+/SimpleLangChainChatbot0/
